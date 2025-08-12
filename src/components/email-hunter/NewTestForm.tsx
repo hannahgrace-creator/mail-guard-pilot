@@ -63,7 +63,7 @@ export const NewTestForm: React.FC<NewTestFormProps> = ({ onTestCreated }) => {
     setLoading(true);
     try {
       // Create the test record
-      const { data: testData, error: testError } = await supabase
+      const { data: testData, error: testError } = await (supabase as any)
         .from('tests')
         .insert({
           user_id: user.id,
@@ -78,12 +78,12 @@ export const NewTestForm: React.FC<NewTestFormProps> = ({ onTestCreated }) => {
         .select()
         .single();
 
-      if (testError) {
-        throw testError;
+      if (testError || !testData) {
+        throw new Error(testError?.message || 'Failed to create test');
       }
 
       // Log the action
-      await supabase.from('audit_logs').insert({
+      await (supabase as any).from('audit_logs').insert({
         user_id: user.id,
         action: 'test_created',
         metadata: {
