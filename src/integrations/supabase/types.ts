@@ -120,7 +120,7 @@ export type Database = {
       }
       tests: {
         Row: {
-          company_name: string
+          company_name: string | null
           created_at: string
           domain: string
           first_name: string
@@ -131,7 +131,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
-          company_name: string
+          company_name?: string | null
           created_at?: string
           domain: string
           first_name: string
@@ -142,7 +142,7 @@ export type Database = {
           user_id: string
         }
         Update: {
-          company_name?: string
+          company_name?: string | null
           created_at?: string
           domain?: string
           first_name?: string
