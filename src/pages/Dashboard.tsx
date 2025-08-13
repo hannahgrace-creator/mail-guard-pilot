@@ -1,17 +1,18 @@
 import React, { useState } from 'react';
 import { Layout } from '@/components/dashboard/Layout';
 import { NewTestForm } from '@/components/email-hunter/NewTestForm';
+import { TestResults } from '@/components/email-hunter/TestResults';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Plus, History, BarChart3 } from 'lucide-react';
 
 export const Dashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState('new-test');
+  const [currentTestId, setCurrentTestId] = useState<string | null>(null);
 
   const handleTestCreated = (testId: string) => {
-    // Navigate to test results or update UI
+    setCurrentTestId(testId);
     setActiveTab('results');
-    console.log('Test created with ID:', testId);
   };
 
   return (
@@ -82,27 +83,31 @@ export const Dashboard: React.FC = () => {
           )}
 
           {activeTab === 'results' && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Test Results</CardTitle>
-                <CardDescription>
-                  View and manage your email verification test results
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="text-center py-8">
-                  <History className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-foreground mb-2">No tests yet</h3>
-                  <p className="text-muted-foreground mb-4">
-                    Create your first email verification test to see results here.
-                  </p>
-                  <Button onClick={() => setActiveTab('new-test')}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Create New Test
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+            currentTestId ? (
+              <TestResults testId={currentTestId} />
+            ) : (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Test Results</CardTitle>
+                  <CardDescription>
+                    View and manage your email verification test results
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-center py-8">
+                    <History className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-foreground mb-2">No tests yet</h3>
+                    <p className="text-muted-foreground mb-4">
+                      Create your first email verification test to see results here.
+                    </p>
+                    <Button onClick={() => setActiveTab('new-test')}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Create New Test
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )
           )}
         </div>
       </div>

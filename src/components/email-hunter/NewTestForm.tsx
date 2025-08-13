@@ -19,8 +19,6 @@ const testSchema = z.object({
   domain: z.string()
     .min(1, 'Domain is required')
     .regex(/^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$/, 'Invalid domain format'),
-  maxPermutations: z.number().min(1).max(2000).default(2000),
-  consent: z.boolean().refine(val => val === true, 'You must confirm you have permission to test this domain'),
 });
 
 type TestFormData = z.infer<typeof testSchema>;
@@ -38,17 +36,9 @@ export const NewTestForm: React.FC<NewTestFormProps> = ({ onTestCreated }) => {
     register,
     handleSubmit,
     formState: { errors },
-    setValue,
-    watch,
   } = useForm<TestFormData>({
     resolver: zodResolver(testSchema),
-    defaultValues: {
-      maxPermutations: 2000,
-      consent: false,
-    },
   });
-
-  const consent = watch('consent');
 
   const onSubmit = async (data: TestFormData) => {
     if (!user) {
@@ -71,8 +61,6 @@ export const NewTestForm: React.FC<NewTestFormProps> = ({ onTestCreated }) => {
           company_name: data.companyName || null,
           first_name: data.firstName,
           last_name: data.lastName,
-          consent: data.consent,
-          max_permutations: data.maxPermutations,
           status: 'pending',
         })
         .select()
@@ -89,7 +77,6 @@ export const NewTestForm: React.FC<NewTestFormProps> = ({ onTestCreated }) => {
         metadata: {
           test_id: testData.id,
           domain: data.domain,
-          max_permutations: data.maxPermutations,
         },
       });
 
@@ -118,8 +105,7 @@ export const NewTestForm: React.FC<NewTestFormProps> = ({ onTestCreated }) => {
       <CardHeader>
         <CardTitle>New Email Verification Test</CardTitle>
         <CardDescription>
-          Generate email permutations and test deliverability for a domain. 
-          Only proceed if you have permission to test the specified domain.
+          Generate unlimited email permutations and perform comprehensive verification tests including syntax, DNS, deliverability, and delivery testing.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -190,55 +176,21 @@ export const NewTestForm: React.FC<NewTestFormProps> = ({ onTestCreated }) => {
             </p>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="maxPermutations">Maximum Permutations</Label>
-            <div className="relative">
-              <Hash className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-              <Input
-                id="maxPermutations"
-                type="number"
-                min="1"
-                max="2000"
-                placeholder="2000"
-                className="pl-10"
-                {...register('maxPermutations', { valueAsNumber: true })}
-              />
+          <div className="space-y-4 p-4 border border-border rounded-md bg-gradient-to-br from-primary/5 to-secondary/5">
+            <div className="text-sm font-medium text-foreground">
+              Comprehensive Email Verification
             </div>
-            {errors.maxPermutations && (
-              <p className="text-sm text-destructive">{errors.maxPermutations.message}</p>
-            )}
-            <p className="text-xs text-muted-foreground">
-              Maximum number of email permutations to generate (1-2000)
-            </p>
-          </div>
-
-          <div className="space-y-4 p-4 border border-border rounded-md bg-muted/50">
-            <div className="flex items-start space-x-3">
-              <Checkbox
-                id="consent"
-                checked={consent}
-                onCheckedChange={(checked) => setValue('consent', checked as boolean)}
-              />
-              <div className="space-y-2">
-                <Label htmlFor="consent" className="text-sm font-medium leading-5">
-                  I confirm I have permission to test the specified domain and any addresses generated.
-                  I will not use this tool for spam or unauthorized access.
-                </Label>
-                {errors.consent && (
-                  <p className="text-sm text-destructive">{errors.consent.message}</p>
-                )}
-              </div>
-            </div>
-            
             <div className="text-xs text-muted-foreground space-y-1">
-              <p>• This tool performs DNS MX lookups and SMTP connection tests</p>
-              <p>• All activity is logged for compliance and audit purposes</p>
-              <p>• Rate limits apply: max 200 test emails per day, 10 per minute</p>
-              <p>• Test emails will only be sent to verified deliverable addresses</p>
+              <p>✓ Unlimited email permutation generation</p>
+              <p>✓ Syntax validation for all combinations</p>
+              <p>✓ DNS MX record verification</p>
+              <p>✓ SMTP deliverability testing</p>
+              <p>✓ Live delivery confirmation tests</p>
+              <p>✓ Real-time results display</p>
             </div>
           </div>
 
-          <Button type="submit" className="w-full" disabled={loading || !consent}>
+          <Button type="submit" className="w-full" disabled={loading}>
             {loading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
