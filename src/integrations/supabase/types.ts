@@ -7,7 +7,7 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instanciate createClient with right options
+  // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "13.0.4"
@@ -35,6 +35,51 @@ export type Database = {
           id?: string
           metadata?: Json | null
           user_id?: string
+        }
+        Relationships: []
+      }
+      crawl_sessions: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          domain: string
+          emails_found: number | null
+          error_message: string | null
+          id: string
+          metadata: Json | null
+          pages_crawled: number | null
+          patterns_detected: number | null
+          started_at: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          domain: string
+          emails_found?: number | null
+          error_message?: string | null
+          id?: string
+          metadata?: Json | null
+          pages_crawled?: number | null
+          patterns_detected?: number | null
+          started_at?: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          domain?: string
+          emails_found?: number | null
+          error_message?: string | null
+          id?: string
+          metadata?: Json | null
+          pages_crawled?: number | null
+          patterns_detected?: number | null
+          started_at?: string
+          status?: string
+          updated_at?: string
         }
         Relationships: []
       }
@@ -87,6 +132,81 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      email_patterns: {
+        Row: {
+          confidence_score: number
+          created_at: string
+          domain: string
+          id: string
+          last_updated: string
+          pattern: string
+          sample_count: number
+          updated_at: string
+        }
+        Insert: {
+          confidence_score?: number
+          created_at?: string
+          domain: string
+          id?: string
+          last_updated?: string
+          pattern: string
+          sample_count?: number
+          updated_at?: string
+        }
+        Update: {
+          confidence_score?: number
+          created_at?: string
+          domain?: string
+          id?: string
+          last_updated?: string
+          pattern?: string
+          sample_count?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      found_emails: {
+        Row: {
+          confidence_score: number | null
+          created_at: string
+          domain: string
+          email_address: string
+          first_name: string | null
+          found_date: string
+          id: string
+          last_name: string | null
+          source_type: string | null
+          source_url: string | null
+          updated_at: string
+        }
+        Insert: {
+          confidence_score?: number | null
+          created_at?: string
+          domain: string
+          email_address: string
+          first_name?: string | null
+          found_date?: string
+          id?: string
+          last_name?: string | null
+          source_type?: string | null
+          source_url?: string | null
+          updated_at?: string
+        }
+        Update: {
+          confidence_score?: number | null
+          created_at?: string
+          domain?: string
+          email_address?: string
+          first_name?: string | null
+          found_date?: string
+          id?: string
+          last_name?: string | null
+          source_type?: string | null
+          source_url?: string | null
+          updated_at?: string
+        }
+        Relationships: []
       }
       rate_limits: {
         Row: {

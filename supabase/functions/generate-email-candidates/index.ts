@@ -7,8 +7,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Email patterns for generation
-const EMAIL_PATTERNS = [
+// Default email patterns (fallback when no patterns detected)
+const DEFAULT_EMAIL_PATTERNS = [
   '{first}.{last}',
   '{first}{last}',
   '{f}.{last}',
@@ -42,6 +42,40 @@ const EMAIL_PATTERNS = [
   'hr',
   'finance'
 ];
+
+// Get detected patterns for a domain or use defaults
+async function getEmailPatterns(supabase: any, domain: string): Promise<string[]> {
+  try {
+    console.log(`Fetching detected patterns for domain: ${domain}`);
+    
+    const { data: patterns, error } = await supabase
+      .from('email_patterns')
+      .select('pattern, confidence_score, sample_count')
+      .eq('domain', domain)
+      .order('confidence_score', { ascending: false })
+      .limit(10); // Use top 10 patterns
+
+    if (error) {
+      console.error('Error fetching patterns:', error);
+      return DEFAULT_EMAIL_PATTERNS;
+    }
+
+    if (patterns && patterns.length > 0) {
+      console.log(`Found ${patterns.length} detected patterns for ${domain}`);
+      const detectedPatterns = patterns.map((p: any) => p.pattern);
+      
+      // Combine detected patterns with some defaults for coverage
+      const combinedPatterns = [...detectedPatterns, ...DEFAULT_EMAIL_PATTERNS.slice(0, 5)];
+      return [...new Set(combinedPatterns)]; // Remove duplicates
+    }
+
+    console.log(`No patterns found for ${domain}, using defaults`);
+    return DEFAULT_EMAIL_PATTERNS;
+  } catch (error) {
+    console.error('Error in getEmailPatterns:', error);
+    return DEFAULT_EMAIL_PATTERNS;
+  }
+}
 
 // Email syntax validation
 function validateEmailSyntax(email: string): boolean {
@@ -80,29 +114,36 @@ async function testSMTPDeliverability(email: string, domain: string): Promise<bo
   }
 }
 
-// Generate email permutations
-function generateEmailPermutations(firstName: string, lastName: string, domain: string): string[] {
-  const emails: string[] = [];
+// Generate email permutations using detected or default patterns
+async function generateEmailPermutations(firstName: string, lastName: string, domain: string, supabase: any): Promise<{ email: string, pattern: string }[]> {
+  const patterns = await getEmailPatterns(supabase, domain);
+  const emails: { email: string, pattern: string }[] = [];
+  
   const f = firstName.toLowerCase().charAt(0);
   const l = lastName.toLowerCase().charAt(0);
   const first = firstName.toLowerCase();
   const last = lastName.toLowerCase();
 
-  for (const pattern of EMAIL_PATTERNS) {
-    let email = pattern
+  for (const pattern of patterns) {
+    let emailLocal = pattern
       .replace(/{first}/g, first)
       .replace(/{last}/g, last)
       .replace(/{f}/g, f)
       .replace(/{l}/g, l);
     
-    email = `${email}@${domain.toLowerCase()}`;
+    const email = `${emailLocal}@${domain.toLowerCase()}`;
     
-    if (validateEmailSyntax(email) && !emails.includes(email)) {
-      emails.push(email);
+    if (validateEmailSyntax(email)) {
+      emails.push({ email, pattern });
     }
   }
 
-  return emails;
+  // Remove duplicates based on email address
+  const uniqueEmails = emails.filter((item, index, arr) => 
+    arr.findIndex(t => t.email === item.email) === index
+  );
+
+  return uniqueEmails;
 }
 
 serve(async (req) => {
@@ -149,25 +190,46 @@ serve(async (req) => {
       .update({ status: 'generating' })
       .eq('id', testId);
 
-    // Generate email permutations
-    const emailPermutations = generateEmailPermutations(
+    // Check for existing crawl data or initiate crawl
+    const { data: existingPatterns } = await supabase
+      .from('email_patterns')
+      .select('*')
+      .eq('domain', test.domain);
+
+    if (!existingPatterns || existingPatterns.length === 0) {
+      console.log(`No patterns found for ${test.domain}, initiating crawl...`);
+      
+      // Trigger domain crawl to discover patterns
+      try {
+        const crawlResponse = await supabase.functions.invoke('crawl-domain', {
+          body: { domain: test.domain }
+        });
+        
+        if (crawlResponse.data?.success) {
+          console.log('Domain crawl initiated successfully');
+        }
+      } catch (crawlError) {
+        console.error('Failed to initiate crawl:', crawlError);
+      }
+    }
+
+    // Generate email permutations using detected patterns
+    const emailCandidates = await generateEmailPermutations(
       test.first_name,
       test.last_name,
-      test.domain
+      test.domain,
+      supabase
     );
 
-    console.log(`Generated ${emailPermutations.length} email permutations`);
+    console.log(`Generated ${emailCandidates.length} email candidates using ${existingPatterns?.length || 0} detected patterns`);
 
     // Insert email candidates
-    const candidates = emailPermutations.map((email, index) => {
-      const pattern = EMAIL_PATTERNS[index % EMAIL_PATTERNS.length];
-      return {
-        test_id: testId,
-        email_address: email,
-        email_pattern: pattern,
-        verification_status: 'pending'
-      };
-    });
+    const candidates = emailCandidates.map(({ email, pattern }) => ({
+      test_id: testId,
+      email_address: email,
+      email_pattern: pattern,
+      verification_status: 'pending'
+    }));
 
     const { error: insertError } = await supabase
       .from('email_candidates')
@@ -185,11 +247,13 @@ serve(async (req) => {
       .eq('id', testId);
 
     // Start background verification process
-    EdgeRuntime.waitUntil(verifyEmailCandidates(supabase, testId, emailPermutations, test.domain));
+    const emailAddresses = emailCandidates.map(c => c.email);
+    EdgeRuntime.waitUntil(verifyEmailCandidates(supabase, testId, emailAddresses, test.domain));
 
     return new Response(JSON.stringify({ 
       success: true,
-      candidates_generated: emailPermutations.length,
+      candidates_generated: emailCandidates.length,
+      patterns_detected: existingPatterns?.length || 0,
       message: 'Email generation started, verification in progress'
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

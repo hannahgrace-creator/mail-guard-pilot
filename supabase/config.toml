@@ -23,3 +23,9 @@ enabled = true
 
 [functions.generate-email-candidates]
 verify_jwt = false
+
+[functions.crawl-domain]
+verify_jwt = false
+
+[functions.verify-email-advanced]
+verify_jwt = false
