@@ -248,7 +248,8 @@ serve(async (req) => {
 
     // Start background verification process
     const emailAddresses = emailCandidates.map(c => c.email);
-    EdgeRuntime.waitUntil(verifyEmailCandidates(supabase, testId, emailAddresses, test.domain));
+    console.log('Starting background verification for', emailAddresses.length, 'emails');
+    EdgeRuntime.waitUntil(verifyEmailCandidatesUsingAdvancedAPI(supabase, testId, emailAddresses));
 
     return new Response(JSON.stringify({ 
       success: true,
@@ -268,91 +269,55 @@ serve(async (req) => {
   }
 });
 
-// Background verification process
-async function verifyEmailCandidates(supabase: any, testId: string, emails: string[], domain: string) {
-  console.log('Starting background verification for', emails.length, 'emails');
+// Background verification using advanced API
+async function verifyEmailCandidatesUsingAdvancedAPI(supabase: any, testId: string, emails: string[]) {
+  console.log('Starting background verification using advanced API for', emails.length, 'emails');
   
   try {
-    // Check DNS records for the domain
-    const dnsResult = await checkDNSRecords(domain);
-    
-    for (let i = 0; i < emails.length; i++) {
-      const email = emails[i];
-      console.log(`Verifying email ${i + 1}/${emails.length}: ${email}`);
-      
+    // Call the verify-email-advanced function
+    const { data: verificationData, error: verificationError } = await supabase.functions.invoke('verify-email-advanced', {
+      body: { emails }
+    });
+
+    if (verificationError) {
+      console.error('Advanced verification failed:', verificationError);
+      throw verificationError;
+    }
+
+    if (!verificationData?.results) {
+      console.error('No verification results received');
+      throw new Error('No verification results received');
+    }
+
+    console.log('Advanced verification completed, updating database...');
+
+    // Update candidates with verification results
+    for (const result of verificationData.results) {
       try {
-        // Step 1: Syntax validation
-        const syntaxValid = validateEmailSyntax(email);
-        
-        // Step 2: DNS validation
-        const dnsValid = dnsResult.valid;
-        
-        // Step 3: SMTP deliverability test
-        const smtpValid = await testSMTPDeliverability(email, domain);
-        
-        // Step 4: Delivery test (optional, simulated)
-        const deliveryTest = smtpValid && Math.random() > 0.3; // Simulate 70% delivery rate
-        
-        // Determine overall status
-        let status = 'syntax_invalid';
-        if (syntaxValid) {
-          status = 'syntax_valid';
-          if (dnsValid) {
-            status = 'dns_valid';
-            if (smtpValid) {
-              status = 'deliverable';
-              if (deliveryTest) {
-                status = 'delivered';
-              }
-            } else {
-              status = 'undeliverable';
-            }
+        // Convert the result to our database format
+        let status = 'invalid';
+        if (result.isValid) {
+          if (result.details.confidence === 'high') {
+            status = 'valid';
+          } else if (result.details.confidence === 'medium') {
+            status = 'valid';
           } else {
-            status = 'dns_invalid';
+            status = 'valid';
           }
         }
-        
-        // Update email candidate with verification results
+
         await supabase
           .from('email_candidates')
           .update({
             verification_status: status,
-            verification_result: {
-              syntax_check: syntaxValid,
-              dns_check: dnsValid,
-              smtp_check: smtpValid,
-              delivery_test: deliveryTest,
-              mx_records: dnsResult.mxRecords || [],
-              error_message: null
-            }
+            verification_result: result,
+            updated_at: new Date().toISOString()
           })
-          .eq('test_id', testId)
-          .eq('email_address', email);
-          
-        // Add small delay to avoid overwhelming servers
-        if (i < emails.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 100));
-        }
-        
-      } catch (emailError: any) {
-        console.error(`Error verifying ${email}:`, emailError);
-        
-        // Update with error status
-        await supabase
-          .from('email_candidates')
-          .update({
-            verification_status: 'syntax_invalid',
-            verification_result: {
-              syntax_check: false,
-              dns_check: false,
-              smtp_check: false,
-              delivery_test: false,
-              mx_records: [],
-              error_message: emailError.message
-            }
-          })
-          .eq('test_id', testId)
-          .eq('email_address', email);
+          .eq('email_address', result.email)
+          .eq('test_id', testId);
+
+      } catch (updateError: any) {
+        console.error(`Error updating candidate ${result.email}:`, updateError);
       }
     }
     
@@ -370,7 +335,10 @@ async function verifyEmailCandidates(supabase: any, testId: string, emails: stri
     // Update test status to failed
     await supabase
       .from('tests')
-      .update({ status: 'failed' })
+      .update({ 
+        status: 'failed',
+        updated_at: new Date().toISOString()
+      })
       .eq('id', testId);
   }
 }

@@ -214,33 +214,8 @@ export const TestResults: React.FC<TestResultsProps> = ({ testId }) => {
         throw new Error(response.error.message);
       }
 
-      // Step 3: Advanced verification
-      setGenerationProgress({ isGenerating: true, progress: 70, currentStep: 'Performing advanced verification...' });
-      const emails = response.data?.candidates?.map((c: any) => c.email_address) || [];
-      
-      if (emails.length > 0) {
-        const verificationResponse = await supabase.functions.invoke('verify-email-advanced', {
-          body: { emails }
-        });
-
-        if (verificationResponse.error) {
-          console.warn('Advanced verification failed:', verificationResponse.error);
-        } else {
-          // Update candidates with verification results
-          const results = verificationResponse.data?.results || [];
-          for (const result of results) {
-            await supabase
-              .from('email_candidates')
-              .update({
-                verification_status: result.isValid ? 'valid' : 'invalid',
-                verification_result: result,
-                updated_at: new Date().toISOString()
-              })
-              .eq('email_address', result.email)
-              .eq('test_id', test.id);
-          }
-        }
-      }
+      // Step 3: Verification is handled automatically by generate-email-candidates
+      setGenerationProgress({ isGenerating: true, progress: 70, currentStep: 'Advanced verification in progress...' });
 
       setGenerationProgress({ isGenerating: true, progress: 100, currentStep: 'Complete!' });
       
@@ -253,7 +228,7 @@ export const TestResults: React.FC<TestResultsProps> = ({ testId }) => {
 
       toast({
         title: "Email generation completed",
-        description: `Generated and verified ${emails.length} email candidates`,
+        description: `Generated and verified ${response.data?.candidates_generated || 'email'} candidates`,
       });
 
     } catch (error) {
