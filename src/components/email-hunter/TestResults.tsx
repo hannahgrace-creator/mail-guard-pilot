@@ -4,34 +4,20 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Progress } from '@/components/ui/progress';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/components/auth/AuthProvider';
-import { 
-  CheckCircle, 
-  XCircle, 
-  Clock, 
-  Mail, 
-  Server, 
-  Globe, 
-  Send,
-  RefreshCw,
-  Download
-} from 'lucide-react';
+import { Download, Search, Loader2, Mail } from "lucide-react";
+import { CrawlInsights } from './CrawlInsights';
 
 interface EmailCandidate {
   id: string;
   email_address: string;
   email_pattern: string;
-  verification_status: 'pending' | 'syntax_valid' | 'syntax_invalid' | 'dns_valid' | 'dns_invalid' | 'deliverable' | 'undeliverable' | 'delivered' | 'bounced';
-  verification_result: {
-    syntax_check?: boolean;
-    dns_check?: boolean;
-    smtp_check?: boolean;
-    delivery_test?: boolean;
-    mx_records?: string[];
-    error_message?: string;
-  } | null;
+  verification_status: string;
+  verification_result?: any;
+  delivery_response?: string;
   created_at: string;
   updated_at: string;
 }
@@ -42,7 +28,7 @@ interface Test {
   first_name: string;
   last_name: string;
   company_name?: string;
-  status: 'pending' | 'generating' | 'verifying' | 'completed' | 'failed';
+  status: string;
   created_at: string;
   updated_at: string;
 }
@@ -51,48 +37,43 @@ interface TestResultsProps {
   testId?: string;
 }
 
-const getStatusIcon = (status: string) => {
+interface GenerationProgress {
+  isGenerating: boolean;
+  progress: number;
+  currentStep: string;
+}
+
+function getStatusIcon(status: string) {
+  // Return appropriate icon based on status
+  return null;
+}
+
+function getStatusBadge(status: string) {
   switch (status) {
-    case 'syntax_valid':
-    case 'dns_valid':
-    case 'deliverable':
-    case 'delivered':
-      return <CheckCircle className="h-4 w-4 text-green-500" />;
-    case 'syntax_invalid':
-    case 'dns_invalid':
-    case 'undeliverable':
-    case 'bounced':
-      return <XCircle className="h-4 w-4 text-red-500" />;
+    case 'valid':
+      return <Badge variant="default" className="text-green-700 bg-green-100">Valid</Badge>;
+    case 'delivery_confirmed':
+      return <Badge variant="default" className="text-emerald-700 bg-emerald-100">✉️ Delivery Confirmed</Badge>;
+    case 'delivery_failed':
+      return <Badge variant="destructive">❌ Delivery Failed</Badge>;
+    case 'invalid': 
+      return <Badge variant="destructive">Invalid</Badge>;
+    case 'pending':
+      return <Badge variant="secondary">Pending</Badge>;
     default:
-      return <Clock className="h-4 w-4 text-yellow-500" />;
+      return <Badge variant="outline">Unknown</Badge>;
   }
-};
-
-const getStatusBadge = (status: string) => {
-  const variants: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-    'syntax_valid': 'default',
-    'dns_valid': 'default',
-    'deliverable': 'default',
-    'delivered': 'default',
-    'syntax_invalid': 'destructive',
-    'dns_invalid': 'destructive',
-    'undeliverable': 'destructive',
-    'bounced': 'destructive',
-    'pending': 'secondary',
-  };
-
-  return (
-    <Badge variant={variants[status] || 'outline'}>
-      {status.replace('_', ' ').toUpperCase()}
-    </Badge>
-  );
-};
+}
 
 export const TestResults: React.FC<TestResultsProps> = ({ testId }) => {
   const [test, setTest] = useState<Test | null>(null);
-  const [candidates, setCandidates] = useState<EmailCandidate[]>([]);
+  const [emailCandidates, setEmailCandidates] = useState<EmailCandidate[]>([]);
   const [loading, setLoading] = useState(true);
-  const [verificationProgress, setVerificationProgress] = useState(0);
+  const [generationProgress, setGenerationProgress] = useState<GenerationProgress>({ 
+    isGenerating: false, 
+    progress: 0, 
+    currentStep: '' 
+  });
   const { user } = useAuth();
   const { toast } = useToast();
 
@@ -100,8 +81,10 @@ export const TestResults: React.FC<TestResultsProps> = ({ testId }) => {
     if (!testId || !user) return;
 
     try {
-      // Fetch test details
-      const { data: testData, error: testError } = await (supabase as any)
+      setLoading(true);
+      
+      // Fetch test
+      const { data: testData, error: testError } = await supabase
         .from('tests')
         .select('*')
         .eq('id', testId)
@@ -111,78 +94,190 @@ export const TestResults: React.FC<TestResultsProps> = ({ testId }) => {
       setTest(testData);
 
       // Fetch email candidates
-      const { data: candidatesData, error: candidatesError } = await (supabase as any)
+      const { data: candidatesData, error: candidatesError } = await supabase
         .from('email_candidates')
         .select('*')
         .eq('test_id', testId)
-        .order('created_at', { ascending: false });
+        .order('verification_status', { ascending: false });
 
       if (candidatesError) throw candidatesError;
-      setCandidates(candidatesData || []);
-
-      // Calculate progress
-      if (candidatesData && candidatesData.length > 0) {
-        const completed = candidatesData.filter((c: EmailCandidate) => 
-          c.verification_status !== 'pending'
-        ).length;
-        setVerificationProgress((completed / candidatesData.length) * 100);
-      }
+      setEmailCandidates(candidatesData || []);
 
     } catch (error: any) {
       console.error('Error fetching test data:', error);
       toast({
-        variant: 'destructive',
-        title: 'Error loading test results',
+        title: "Error loading test results",
         description: error.message,
+        variant: "destructive",
       });
     } finally {
       setLoading(false);
     }
   };
 
-  const startEmailGeneration = async () => {
-    if (!testId || !user) return;
+  const sendTestEmails = async () => {
+    if (!emailCandidates.length) return;
 
+    setGenerationProgress({ isGenerating: true, progress: 0, currentStep: 'Starting real email delivery tests...' });
+    
     try {
-      // Call edge function to start email generation and verification
-      const { data, error } = await supabase.functions.invoke('generate-email-candidates', {
-        body: { testId }
-      });
+      const validCandidates = emailCandidates.filter(c => c.verification_status === 'valid');
+      const totalEmails = Math.min(validCandidates.length, 5); // Test max 5 emails
+      
+      for (let i = 0; i < totalEmails; i++) {
+        const candidate = validCandidates[i];
+        const progress = ((i + 1) / totalEmails) * 90;
+        
+        setGenerationProgress({ 
+          isGenerating: true, 
+          progress, 
+          currentStep: `Sending test email to ${candidate.email_address}...` 
+        });
 
-      if (error) throw error;
+        const testResponse = await supabase.functions.invoke('send-test-email', {
+          body: { 
+            email: candidate.email_address,
+            testId: test?.id
+          }
+        });
 
-      toast({
-        title: 'Email generation started',
-        description: 'Generating email combinations and starting verification...',
-      });
+        // Update candidate with real delivery test result
+        const deliveryStatus = testResponse.error ? 'delivery_failed' : 'delivery_confirmed';
+        
+        await supabase
+          .from('email_candidates')
+          .update({
+            verification_status: deliveryStatus,
+            delivery_response: JSON.stringify(testResponse.data || testResponse.error),
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', candidate.id);
 
+        // Small delay between emails
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+
+      setGenerationProgress({ isGenerating: true, progress: 100, currentStep: 'Real delivery tests complete!' });
+      
       // Refresh data
-      fetchTestData();
-    } catch (error: any) {
-      console.error('Error starting email generation:', error);
+      await fetchTestData();
+      
+      setTimeout(() => {
+        setGenerationProgress({ isGenerating: false, progress: 0, currentStep: '' });
+      }, 1000);
+
       toast({
-        variant: 'destructive',
-        title: 'Error starting generation',
-        description: error.message,
+        title: "Real delivery tests completed",
+        description: `Tested ${totalEmails} email addresses with actual delivery`,
+      });
+
+    } catch (error) {
+      console.error('Error testing email delivery:', error);
+      setGenerationProgress({ isGenerating: false, progress: 0, currentStep: '' });
+      toast({
+        title: "Delivery test failed", 
+        description: error instanceof Error ? error.message : "Unknown error occurred",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const startEmailGeneration = async () => {
+    if (!test?.id) return;
+
+    setGenerationProgress({ isGenerating: true, progress: 0, currentStep: 'Initializing...' });
+    
+    try {
+      // Step 1: Start crawling
+      setGenerationProgress({ isGenerating: true, progress: 20, currentStep: 'Crawling domain for emails...' });
+      const crawlResponse = await supabase.functions.invoke('crawl-domain', {
+        body: { domain: test.domain }
+      });
+
+      if (crawlResponse.error) {
+        throw new Error(crawlResponse.error.message);
+      }
+
+      // Step 2: Generate candidates
+      setGenerationProgress({ isGenerating: true, progress: 40, currentStep: 'Generating email candidates...' });
+      const response = await supabase.functions.invoke('generate-email-candidates', {
+        body: { 
+          testId: test.id,
+          domain: test.domain,
+          firstName: test.first_name,
+          lastName: test.last_name,
+          companyName: test.company_name
+        }
+      });
+
+      if (response.error) {
+        throw new Error(response.error.message);
+      }
+
+      // Step 3: Advanced verification
+      setGenerationProgress({ isGenerating: true, progress: 70, currentStep: 'Performing advanced verification...' });
+      const emails = response.data?.candidates?.map((c: any) => c.email_address) || [];
+      
+      if (emails.length > 0) {
+        const verificationResponse = await supabase.functions.invoke('verify-email-advanced', {
+          body: { emails }
+        });
+
+        if (verificationResponse.error) {
+          console.warn('Advanced verification failed:', verificationResponse.error);
+        } else {
+          // Update candidates with verification results
+          const results = verificationResponse.data?.results || [];
+          for (const result of results) {
+            await supabase
+              .from('email_candidates')
+              .update({
+                verification_status: result.isValid ? 'valid' : 'invalid',
+                verification_result: result,
+                updated_at: new Date().toISOString()
+              })
+              .eq('email_address', result.email)
+              .eq('test_id', test.id);
+          }
+        }
+      }
+
+      setGenerationProgress({ isGenerating: true, progress: 100, currentStep: 'Complete!' });
+      
+      // Refresh the data
+      await fetchTestData();
+      
+      setTimeout(() => {
+        setGenerationProgress({ isGenerating: false, progress: 0, currentStep: '' });
+      }, 1000);
+
+      toast({
+        title: "Email generation completed",
+        description: `Generated and verified ${emails.length} email candidates`,
+      });
+
+    } catch (error) {
+      console.error('Error generating emails:', error);
+      setGenerationProgress({ isGenerating: false, progress: 0, currentStep: '' });
+      toast({
+        title: "Generation failed", 
+        description: error instanceof Error ? error.message : "Unknown error occurred",
+        variant: "destructive",
       });
     }
   };
 
   const exportResults = () => {
-    if (candidates.length === 0) return;
+    if (emailCandidates.length === 0) return;
 
     const csvContent = [
-      ['Email Address', 'Pattern', 'Status', 'Syntax Check', 'DNS Check', 'SMTP Check', 'Delivery Test', 'MX Records', 'Error Message'],
-      ...candidates.map(candidate => [
+      ['Email Address', 'Pattern', 'Status', 'Verification Score', 'Delivery Response'],
+      ...emailCandidates.map(candidate => [
         candidate.email_address,
         candidate.email_pattern,
         candidate.verification_status,
-        candidate.verification_result?.syntax_check ? 'Pass' : 'Fail',
-        candidate.verification_result?.dns_check ? 'Pass' : 'Fail',
-        candidate.verification_result?.smtp_check ? 'Pass' : 'Fail',
-        candidate.verification_result?.delivery_test ? 'Pass' : 'Fail',
-        candidate.verification_result?.mx_records?.join('; ') || '',
-        candidate.verification_result?.error_message || ''
+        candidate.verification_result?.score || '',
+        candidate.delivery_response || ''
       ])
     ].map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
 
@@ -201,20 +296,20 @@ export const TestResults: React.FC<TestResultsProps> = ({ testId }) => {
     fetchTestData();
   }, [testId, user]);
 
-  // Auto-refresh every 5 seconds if verification is in progress
+  // Auto-refresh when test is in progress
   useEffect(() => {
-    if (test?.status === 'verifying' || test?.status === 'generating') {
-      const interval = setInterval(fetchTestData, 5000);
+    if (test?.status === 'generating' || generationProgress.isGenerating) {
+      const interval = setInterval(fetchTestData, 3000);
       return () => clearInterval(interval);
     }
-  }, [test?.status]);
+  }, [test?.status, generationProgress.isGenerating]);
 
   if (loading) {
     return (
       <Card>
         <CardContent className="p-6">
           <div className="flex items-center justify-center">
-            <RefreshCw className="h-6 w-6 animate-spin mr-2" />
+            <Loader2 className="h-6 w-6 animate-spin mr-2" />
             <span>Loading test results...</span>
           </div>
         </CardContent>
@@ -234,177 +329,172 @@ export const TestResults: React.FC<TestResultsProps> = ({ testId }) => {
     );
   }
 
+  const deliveryConfirmed = emailCandidates.filter(c => c.verification_status === 'delivery_confirmed').length;
+  const validEmails = emailCandidates.filter(c => c.verification_status === 'valid').length;
+  const invalidEmails = emailCandidates.filter(c => c.verification_status === 'invalid').length;
+  const pendingEmails = emailCandidates.filter(c => c.verification_status === 'pending').length;
+
   return (
     <div className="space-y-6">
       {/* Test Overview */}
       <Card>
         <CardHeader>
-          <div className="flex justify-between items-start">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <Globe className="h-5 w-5" />
-                {test.domain}
-              </CardTitle>
-              <CardDescription>
-                Testing emails for {test.first_name} {test.last_name}
-                {test.company_name && ` at ${test.company_name}`}
-              </CardDescription>
-            </div>
-            <div className="flex gap-2">
-              <Button onClick={fetchTestData} variant="outline" size="sm">
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Refresh
-              </Button>
-              {candidates.length > 0 && (
-                <Button onClick={exportResults} variant="outline" size="sm">
-                  <Download className="h-4 w-4 mr-2" />
-                  Export CSV
-                </Button>
-              )}
-            </div>
-          </div>
+          <CardTitle>Test Results for {test.domain}</CardTitle>
+          <CardDescription>
+            Testing emails for {test.first_name} {test.last_name}
+            {test.company_name && ` at ${test.company_name}`}
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             <div className="text-center">
-              <div className="text-2xl font-bold text-primary">{candidates.length}</div>
-              <div className="text-sm text-muted-foreground">Email Candidates</div>
+              <div className="text-2xl font-bold text-emerald-600">{deliveryConfirmed}</div>
+              <div className="text-sm text-muted-foreground">✉️ Delivery Confirmed</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-green-500">
-                {candidates.filter(c => ['delivered', 'deliverable'].includes(c.verification_status)).length}
-              </div>
-              <div className="text-sm text-muted-foreground">Deliverable</div>
+              <div className="text-2xl font-bold text-green-600">{validEmails}</div>
+              <div className="text-sm text-muted-foreground">Valid</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-red-500">
-                {candidates.filter(c => ['bounced', 'undeliverable'].includes(c.verification_status)).length}
-              </div>
-              <div className="text-sm text-muted-foreground">Undeliverable</div>
+              <div className="text-2xl font-bold text-red-600">{invalidEmails}</div>
+              <div className="text-sm text-muted-foreground">Invalid</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-yellow-500">
-                {candidates.filter(c => c.verification_status === 'pending').length}
-              </div>
+              <div className="text-2xl font-bold text-yellow-600">{pendingEmails}</div>
               <div className="text-sm text-muted-foreground">Pending</div>
             </div>
           </div>
 
-          {verificationProgress > 0 && verificationProgress < 100 && (
-            <div className="mt-4">
-              <div className="flex justify-between text-sm mb-1">
-                <span>Verification Progress</span>
-                <span>{Math.round(verificationProgress)}%</span>
+          {generationProgress.isGenerating && (
+            <div className="mb-4">
+              <div className="flex justify-between text-sm mb-2">
+                <span>{generationProgress.currentStep}</span>
+                <span>{Math.round(generationProgress.progress)}%</span>
               </div>
-              <Progress value={verificationProgress} className="w-full" />
+              <Progress value={generationProgress.progress} className="w-full" />
             </div>
           )}
 
-          {candidates.length === 0 && test.status === 'pending' && (
-            <div className="text-center mt-4">
-              <Button onClick={startEmailGeneration}>
-                <Send className="h-4 w-4 mr-2" />
-                Start Email Generation & Verification
+          <div className="flex gap-2">
+            {emailCandidates.length > 0 && (
+              <Button onClick={exportResults} variant="outline" size="sm">
+                <Download className="h-4 w-4 mr-2" />
+                Export CSV
               </Button>
-            </div>
-          )}
+            )}
+          </div>
         </CardContent>
       </Card>
 
-      {/* Email Candidates Table */}
-      {candidates.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Email Verification Results</CardTitle>
-            <CardDescription>
-              Comprehensive verification results for all generated email combinations
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Email Address</TableHead>
-                    <TableHead>Pattern</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-center">
-                      <Mail className="h-4 w-4 inline mr-1" />
-                      Syntax
-                    </TableHead>
-                    <TableHead className="text-center">
-                      <Server className="h-4 w-4 inline mr-1" />
-                      DNS
-                    </TableHead>
-                    <TableHead className="text-center">
-                      <Globe className="h-4 w-4 inline mr-1" />
-                      SMTP
-                    </TableHead>
-                    <TableHead className="text-center">
-                      <Send className="h-4 w-4 inline mr-1" />
-                      Delivery
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {candidates.map((candidate) => (
-                    <TableRow key={candidate.id}>
-                      <TableCell className="font-medium">
-                        {candidate.email_address}
-                      </TableCell>
-                      <TableCell className="font-mono text-sm">
-                        {candidate.email_pattern}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          {getStatusIcon(candidate.verification_status)}
-                          {getStatusBadge(candidate.verification_status)}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {candidate.verification_result?.syntax_check === true ? (
-                          <CheckCircle className="h-4 w-4 text-green-500 inline" />
-                        ) : candidate.verification_result?.syntax_check === false ? (
-                          <XCircle className="h-4 w-4 text-red-500 inline" />
-                        ) : (
-                          <Clock className="h-4 w-4 text-yellow-500 inline" />
-                        )}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {candidate.verification_result?.dns_check === true ? (
-                          <CheckCircle className="h-4 w-4 text-green-500 inline" />
-                        ) : candidate.verification_result?.dns_check === false ? (
-                          <XCircle className="h-4 w-4 text-red-500 inline" />
-                        ) : (
-                          <Clock className="h-4 w-4 text-yellow-500 inline" />
-                        )}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {candidate.verification_result?.smtp_check === true ? (
-                          <CheckCircle className="h-4 w-4 text-green-500 inline" />
-                        ) : candidate.verification_result?.smtp_check === false ? (
-                          <XCircle className="h-4 w-4 text-red-500 inline" />
-                        ) : (
-                          <Clock className="h-4 w-4 text-yellow-500 inline" />
-                        )}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {candidate.verification_result?.delivery_test === true ? (
-                          <CheckCircle className="h-4 w-4 text-green-500 inline" />
-                        ) : candidate.verification_result?.delivery_test === false ? (
-                          <XCircle className="h-4 w-4 text-red-500 inline" />
-                        ) : (
-                          <Clock className="h-4 w-4 text-yellow-500 inline" />
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      <Tabs defaultValue="results" className="w-full">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="results">Email Results</TabsTrigger>
+          <TabsTrigger value="insights">Domain Insights</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="results" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Email Verification Results</CardTitle>
+              <CardDescription>
+                Comprehensive verification results for all generated email combinations
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+            {emailCandidates.length === 0 && test?.status === 'pending' && (
+              <div className="text-center py-8">
+                <p className="text-muted-foreground mb-4">No email candidates found yet.</p>
+                <Button 
+                  onClick={startEmailGeneration}
+                  disabled={generationProgress.isGenerating}
+                  size="lg"
+                >
+                  {generationProgress.isGenerating ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      {generationProgress.currentStep}
+                    </>
+                  ) : (
+                    <>
+                      <Search className="w-4 h-4 mr-2" />
+                      Start Email Discovery
+                    </>
+                  )}
+                </Button>
+              </div>
+            )}
+
+            {emailCandidates.length > 0 && emailCandidates.some(c => c.verification_status === 'valid') && (
+              <div className="mb-6 p-4 border rounded-lg bg-blue-50">
+                <h3 className="text-lg font-semibold mb-2 text-blue-900">🚀 Ready for Real Delivery Test</h3>
+                <p className="text-blue-700 mb-3">
+                  Send actual test emails to verify real deliverability (max 5 emails will be tested).
+                </p>
+                <Button 
+                  onClick={sendTestEmails}
+                  disabled={generationProgress.isGenerating}
+                  variant="default"
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  {generationProgress.isGenerating ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      {generationProgress.currentStep}
+                    </>
+                  ) : (
+                    <>
+                      <Mail className="w-4 h-4 mr-2" />
+                      Send Test Emails
+                    </>
+                  )}
+                </Button>
+              </div>
+            )}
+
+              {emailCandidates.length > 0 && (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Email Address</TableHead>
+                        <TableHead>Pattern</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Score</TableHead>
+                        <TableHead>Confidence</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {emailCandidates.map((candidate) => (
+                        <TableRow key={candidate.id}>
+                          <TableCell className="font-medium">
+                            {candidate.email_address}
+                          </TableCell>
+                          <TableCell className="font-mono text-sm">
+                            {candidate.email_pattern}
+                          </TableCell>
+                          <TableCell>
+                            {getStatusBadge(candidate.verification_status)}
+                          </TableCell>
+                          <TableCell>
+                            {candidate.verification_result?.score || '-'}
+                          </TableCell>
+                          <TableCell>
+                            {candidate.verification_result?.details?.confidence || '-'}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="insights">
+          <CrawlInsights domain={test.domain} />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };

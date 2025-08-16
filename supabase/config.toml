@@ -29,3 +29,6 @@ verify_jwt = false
 
 [functions.verify-email-advanced]
 verify_jwt = false
+
+[functions.send-test-email]
+verify_jwt = false
