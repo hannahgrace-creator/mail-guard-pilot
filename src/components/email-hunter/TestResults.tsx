@@ -51,9 +51,9 @@ function getStatusIcon(status: string) {
 function getStatusBadge(status: string) {
   switch (status) {
     case 'valid':
-      return <Badge variant="default" className="text-green-700 bg-green-100">Valid</Badge>;
+      return <Badge variant="default" className="bg-primary/10 text-primary">Valid</Badge>;
     case 'delivery_confirmed':
-      return <Badge variant="default" className="text-emerald-700 bg-emerald-100">✉️ Delivery Confirmed</Badge>;
+      return <Badge variant="default" className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-400">✉️ Delivery Confirmed</Badge>;
     case 'delivery_failed':
       return <Badge variant="destructive">❌ Delivery Failed</Badge>;
     case 'invalid': 
@@ -323,19 +323,19 @@ export const TestResults: React.FC<TestResultsProps> = ({ testId }) => {
         <CardContent>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             <div className="text-center">
-              <div className="text-2xl font-bold text-emerald-600">{deliveryConfirmed}</div>
+              <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{deliveryConfirmed}</div>
               <div className="text-sm text-muted-foreground">✉️ Delivery Confirmed</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-green-600">{validEmails}</div>
+              <div className="text-2xl font-bold text-primary">{validEmails}</div>
               <div className="text-sm text-muted-foreground">Valid</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-red-600">{invalidEmails}</div>
+              <div className="text-2xl font-bold text-destructive">{invalidEmails}</div>
               <div className="text-sm text-muted-foreground">Invalid</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-yellow-600">{pendingEmails}</div>
+              <div className="text-2xl font-bold text-muted-foreground">{pendingEmails}</div>
               <div className="text-sm text-muted-foreground">Pending</div>
             </div>
           </div>
@@ -400,16 +400,15 @@ export const TestResults: React.FC<TestResultsProps> = ({ testId }) => {
             )}
 
             {emailCandidates.length > 0 && emailCandidates.some(c => c.verification_status === 'valid') && (
-              <div className="mb-6 p-4 border rounded-lg bg-blue-50">
-                <h3 className="text-lg font-semibold mb-2 text-blue-900">🚀 Ready for Real Delivery Test</h3>
-                <p className="text-blue-700 mb-3">
+              <div className="mb-6 p-4 border rounded-lg bg-primary/5 border-primary/20">
+                <h3 className="text-lg font-semibold mb-2 text-foreground">🚀 Ready for Real Delivery Test</h3>
+                <p className="text-muted-foreground mb-3">
                   Send actual test emails to verify real deliverability (max 5 emails will be tested).
                 </p>
                 <Button 
                   onClick={sendTestEmails}
                   disabled={generationProgress.isGenerating}
                   variant="default"
-                  className="bg-blue-600 hover:bg-blue-700"
                 >
                   {generationProgress.isGenerating ? (
                     <>

@@ -80,9 +80,18 @@ export const NewTestForm: React.FC<NewTestFormProps> = ({ onTestCreated }) => {
         },
       });
 
+      // Automatically start email generation
+      try {
+        await supabase.functions.invoke('generate-email-candidates', {
+          body: { testId: testData.id }
+        });
+      } catch (genError) {
+        console.error('Auto-generation failed:', genError);
+      }
+
       toast({
         title: 'Test created successfully!',
-        description: `Email verification test started for ${data.domain}`,
+        description: `Email verification started automatically for ${data.domain}`,
       });
 
       if (onTestCreated) {
