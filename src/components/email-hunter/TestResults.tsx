@@ -308,6 +308,9 @@ export const TestResults: React.FC<TestResultsProps> = ({ testId }) => {
   const validEmails = emailCandidates.filter(c => c.verification_status === 'valid').length;
   const invalidEmails = emailCandidates.filter(c => c.verification_status === 'invalid').length;
   const pendingEmails = emailCandidates.filter(c => c.verification_status === 'pending').length;
+  
+  const totalVerified = validEmails + invalidEmails;
+  const successRate = totalVerified > 0 ? Math.round((validEmails / totalVerified) * 100) : 0;
 
   return (
     <div className="space-y-6">
@@ -321,7 +324,7 @@ export const TestResults: React.FC<TestResultsProps> = ({ testId }) => {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
             <div className="text-center">
               <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{deliveryConfirmed}</div>
               <div className="text-sm text-muted-foreground">✉️ Delivery Confirmed</div>
@@ -338,7 +341,19 @@ export const TestResults: React.FC<TestResultsProps> = ({ testId }) => {
               <div className="text-2xl font-bold text-muted-foreground">{pendingEmails}</div>
               <div className="text-sm text-muted-foreground">Pending</div>
             </div>
+            <div className="text-center">
+              <div className="text-3xl font-bold text-green-600 dark:text-green-400">{successRate}%</div>
+              <div className="text-sm text-muted-foreground">Success Rate</div>
+            </div>
           </div>
+
+          {successRate >= 90 && (
+            <div className="mb-4 p-3 rounded-lg bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800">
+              <div className="text-center text-green-800 dark:text-green-200">
+                🎉 Excellent! {successRate}% success rate achieved with bulletproof verification
+              </div>
+            </div>
+          )}
 
           {generationProgress.isGenerating && (
             <div className="mb-4">
@@ -403,7 +418,11 @@ export const TestResults: React.FC<TestResultsProps> = ({ testId }) => {
               <div className="mb-6 p-4 border rounded-lg bg-primary/5 border-primary/20">
                 <h3 className="text-lg font-semibold mb-2 text-foreground">🚀 Ready for Real Delivery Test</h3>
                 <p className="text-muted-foreground mb-3">
-                  Send actual test emails to verify real deliverability (max 5 emails will be tested).
+                  Send actual test emails to confirm real deliverability (max 5 emails will be tested).
+                  <br />
+                  <span className="text-xs text-primary">
+                    Current Success Rate: {successRate}% • {validEmails} valid out of {totalVerified} verified
+                  </span>
                 </p>
                 <Button 
                   onClick={sendTestEmails}
@@ -426,39 +445,55 @@ export const TestResults: React.FC<TestResultsProps> = ({ testId }) => {
             )}
 
               {emailCandidates.length > 0 && (
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Email Address</TableHead>
-                        <TableHead>Pattern</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Score</TableHead>
-                        <TableHead>Confidence</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {emailCandidates.map((candidate) => (
-                        <TableRow key={candidate.id}>
-                          <TableCell className="font-medium">
-                            {candidate.email_address}
-                          </TableCell>
-                          <TableCell className="font-mono text-sm">
-                            {candidate.email_pattern}
-                          </TableCell>
-                          <TableCell>
-                            {getStatusBadge(candidate.verification_status)}
-                          </TableCell>
-                          <TableCell>
-                            {candidate.verification_result?.score || '-'}
-                          </TableCell>
-                          <TableCell>
-                            {candidate.verification_result?.details?.confidence || '-'}
-                          </TableCell>
+                <div className="space-y-4">
+                  {/* Success Rate Banner */}
+                  {successRate >= 95 && (
+                    <div className="p-4 rounded-lg bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950 dark:to-emerald-950 border border-green-200 dark:border-green-800">
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-green-700 dark:text-green-300 mb-1">
+                          🎯 {successRate}% Success Rate!
+                        </div>
+                        <div className="text-sm text-green-600 dark:text-green-400">
+                          Bulletproof verification bypassed all obstacles • {validEmails} valid emails found
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Email Address</TableHead>
+                          <TableHead>Pattern</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Score</TableHead>
+                          <TableHead>Provider</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {emailCandidates.map((candidate) => (
+                          <TableRow key={candidate.id}>
+                            <TableCell className="font-medium">
+                              {candidate.email_address}
+                            </TableCell>
+                            <TableCell className="font-mono text-sm">
+                              {candidate.email_pattern}
+                            </TableCell>
+                            <TableCell>
+                              {getStatusBadge(candidate.verification_status)}
+                            </TableCell>
+                            <TableCell>
+                              {candidate.verification_result?.score || '-'}
+                            </TableCell>
+                            <TableCell className="text-xs text-muted-foreground">
+                              {candidate.verification_result?.details?.provider || '-'}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
                 </div>
               )}
             </CardContent>

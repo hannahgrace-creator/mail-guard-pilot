@@ -1,19 +1,71 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Layout } from '@/components/dashboard/Layout';
 import { NewTestForm } from '@/components/email-hunter/NewTestForm';
 import { TestResults } from '@/components/email-hunter/TestResults';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Plus, History, BarChart3 } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/components/auth/AuthProvider';
 
 export const Dashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState('new-test');
   const [currentTestId, setCurrentTestId] = useState<string | null>(null);
+  const [stats, setStats] = useState({
+    testsThisMonth: 0,
+    emailsVerified: 0,
+    successRate: 0
+  });
+  const { user } = useAuth();
 
   const handleTestCreated = (testId: string) => {
     setCurrentTestId(testId);
     setActiveTab('results');
+    fetchStats(); // Refresh stats
   };
+
+  const fetchStats = async () => {
+    if (!user) return;
+
+    try {
+      // Get tests this month
+      const startOfMonth = new Date();
+      startOfMonth.setDate(1);
+      startOfMonth.setHours(0, 0, 0, 0);
+
+      const { data: tests, error: testsError } = await supabase
+        .from('tests')
+        .select('id')
+        .eq('user_id', user.id)
+        .gte('created_at', startOfMonth.toISOString());
+
+      if (testsError) throw testsError;
+
+      // Get email verification stats
+      const { data: candidates, error: candidatesError } = await supabase
+        .from('email_candidates')
+        .select('verification_status, test_id')
+        .in('test_id', tests?.map(t => t.id) || []);
+
+      if (candidatesError) throw candidatesError;
+
+      const totalEmails = candidates?.length || 0;
+      const validEmails = candidates?.filter(c => c.verification_status === 'valid').length || 0;
+      const successRateCalc = totalEmails > 0 ? Math.round((validEmails / totalEmails) * 100) : 0;
+
+      setStats({
+        testsThisMonth: tests?.length || 0,
+        emailsVerified: totalEmails,
+        successRate: successRateCalc
+      });
+    } catch (error) {
+      console.error('Error fetching stats:', error);
+    }
+  };
+
+  useEffect(() => {
+    fetchStats();
+  }, [user]);
 
   return (
     <Layout title="Dashboard">
@@ -26,8 +78,10 @@ export const Dashboard: React.FC = () => {
               <BarChart3 className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">0</div>
-              <p className="text-xs text-muted-foreground">No tests yet</p>
+              <div className="text-2xl font-bold">{stats.testsThisMonth}</div>
+              <p className="text-xs text-muted-foreground">
+                {stats.testsThisMonth === 0 ? 'No tests yet' : 'Active verification tests'}
+              </p>
             </CardContent>
           </Card>
           
@@ -37,8 +91,8 @@ export const Dashboard: React.FC = () => {
               <BarChart3 className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">0</div>
-              <p className="text-xs text-muted-foreground">Total email checks</p>
+              <div className="text-2xl font-bold">{stats.emailsVerified}</div>
+              <p className="text-xs text-muted-foreground">Total email checks completed</p>
             </CardContent>
           </Card>
           
@@ -48,8 +102,10 @@ export const Dashboard: React.FC = () => {
               <BarChart3 className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">--%</div>
-              <p className="text-xs text-muted-foreground">Deliverability rate</p>
+              <div className="text-2xl font-bold text-green-600 dark:text-green-400">{stats.successRate}%</div>
+              <p className="text-xs text-muted-foreground">
+                {stats.successRate >= 95 ? 'Excellent bulletproof verification!' : 'Deliverability accuracy rate'}
+              </p>
             </CardContent>
           </Card>
         </div>

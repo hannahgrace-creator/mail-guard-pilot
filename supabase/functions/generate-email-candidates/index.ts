@@ -7,22 +7,21 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Default email patterns (fallback when no patterns detected)
+// Enhanced default email patterns with higher success rate
 const DEFAULT_EMAIL_PATTERNS = [
+  // Common corporate patterns
   '{first}.{last}',
   '{first}{last}',
   '{f}.{last}',
   '{f}{last}',
   '{first}.{l}',
   '{first}{l}',
-  '{first}',
-  '{last}',
-  '{f}.{l}',
-  '{f}{l}',
   '{first}_{last}',
   '{f}_{last}',
   '{first}_{l}',
   '{f}_{l}',
+  
+  // Reverse patterns
   '{last}.{first}',
   '{last}{first}',
   '{last}.{f}',
@@ -31,6 +30,32 @@ const DEFAULT_EMAIL_PATTERNS = [
   '{l}{first}',
   '{l}.{f}',
   '{l}{f}',
+  '{last}_{first}',
+  '{last}_{f}',
+  '{l}_{first}',
+  '{l}_{f}',
+  
+  // Single name patterns
+  '{first}',
+  '{last}',
+  '{f}.{l}',
+  '{f}{l}',
+  '{f}_{l}',
+  '{l}_{f}',
+  
+  // With numbers (common variations)
+  '{first}.{last}1',
+  '{first}{last}1',
+  '{f}{last}1',
+  '{first}1',
+  '{last}1',
+  
+  // With initials and numbers
+  '{first}.{last}01',
+  '{f}.{last}01',
+  '{first}01',
+  
+  // Generic/role-based emails
   'info',
   'contact',
   'admin',
@@ -40,7 +65,15 @@ const DEFAULT_EMAIL_PATTERNS = [
   'sales',
   'marketing',
   'hr',
-  'finance'
+  'finance',
+  'office',
+  'reception',
+  'jobs',
+  'careers',
+  'help',
+  'service',
+  'business',
+  'mail'
 ];
 
 // Get detected patterns for a domain or use defaults
