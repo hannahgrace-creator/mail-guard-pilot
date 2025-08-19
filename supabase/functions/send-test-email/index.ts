@@ -44,11 +44,23 @@ serve(async (req) => {
     const verificationCode = Math.random().toString(36).substring(2, 15);
     const timestamp = new Date().toISOString();
 
-    const emailResponse = await resend.emails.send({
-      from: 'Email Verification <noreply@resend.dev>',
-      to: [email],
-      subject: 'Email Verification Test - Please Ignore',
-      html: `
+    // Try different verified domains for better deliverability
+    const fromAddresses = [
+      'Email Verification <onboarding@resend.dev>',  // Resend's verified domain
+      'Email Verification <delivered@resend.dev>',   // Alternative verified domain
+    ];
+    
+    let emailResponse;
+    let lastError;
+    
+    // Try each from address until one succeeds
+    for (const fromAddress of fromAddresses) {
+      try {
+        emailResponse = await resend.emails.send({
+          from: fromAddress,
+          to: [email],
+          subject: 'Email Verification Test - Please Ignore',
+          html: `
         <!DOCTYPE html>
         <html>
           <head>
@@ -85,8 +97,8 @@ serve(async (req) => {
             </div>
           </body>
         </html>
-      `,
-      text: `
+          `,
+          text: `
 Email Verification Test
 
 This is an automated email verification test. Your email address ${email} is working correctly and can receive emails.
@@ -95,17 +107,31 @@ Verification Code: ${verificationCode}
 Timestamp: ${timestamp}
 
 You can safely ignore or delete this email. This test was conducted to verify email deliverability for business email validation purposes.
-      `,
-    });
+          `,
+        });
+        
+        // If successful, break out of the loop
+        if (!emailResponse.error) {
+          console.log(`Successfully sent email to ${email} using ${fromAddress}`);
+          break;
+        } else {
+          lastError = emailResponse.error;
+          console.log(`Failed with ${fromAddress}:`, emailResponse.error);
+        }
+      } catch (error) {
+        lastError = error;
+        console.log(`Error with ${fromAddress}:`, error);
+      }
+    }
 
-    if (emailResponse.error) {
-      console.error(`Failed to send test email to ${email}:`, emailResponse.error);
+    if (emailResponse?.error || !emailResponse) {
+      console.error(`Failed to send test email to ${email}:`, lastError);
       
       const response: TestEmailResponse = {
         success: false,
         email,
         deliveryStatus: 'failed',
-        error: emailResponse.error.message || 'Unknown error',
+        error: lastError?.message || 'All sender addresses failed - domain verification may be required',
         timestamp,
       };
 
