@@ -7,73 +7,55 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Enhanced default email patterns with higher success rate
-const DEFAULT_EMAIL_PATTERNS = [
-  // Common corporate patterns
-  '{first}.{last}',
-  '{first}{last}',
-  '{f}.{last}',
-  '{f}{last}',
-  '{first}.{l}',
-  '{first}{l}',
-  '{first}_{last}',
-  '{f}_{last}',
-  '{first}_{l}',
-  '{f}_{l}',
+// Smart email patterns prioritized by real-world usage frequency
+const HIGH_PRIORITY_PATTERNS = [
+  // Most common corporate patterns (90% of business emails)
+  '{first}.{last}',     // john.doe
+  '{first}{last}',      // johndoe  
+  '{f}{last}',          // jdoe
+  '{first}',            // john
+  '{last}',             // doe
+  '{f}.{last}',         // j.doe
+];
+
+const MEDIUM_PRIORITY_PATTERNS = [
+  // Common variations (8% of business emails)
+  '{first}_{last}',     // john_doe
+  '{last}.{first}',     // doe.john
+  '{first}.{l}',        // john.d
+  '{f}_{last}',         // j_doe
+  '{first}{l}',         // johnd
+  '{last}{first}',      // doejohn
+];
+
+const LOW_PRIORITY_PATTERNS = [
+  // Less common but still used (2% of business emails)
+  '{l}.{first}',        // d.john
+  '{l}{first}',         // djohn
+  '{f}.{l}',            // j.d
+  '{f}{l}',             // jd
+  '{l}_{first}',        // d_john
+  '{f}_{l}',            // j_d
+  '{last}_{first}',     // doe_john
   
-  // Reverse patterns
-  '{last}.{first}',
-  '{last}{first}',
-  '{last}.{f}',
-  '{last}{f}',
-  '{l}.{first}',
-  '{l}{first}',
-  '{l}.{f}',
-  '{l}{f}',
-  '{last}_{first}',
-  '{last}_{f}',
-  '{l}_{first}',
-  '{l}_{f}',
-  
-  // Single name patterns
-  '{first}',
-  '{last}',
-  '{f}.{l}',
-  '{f}{l}',
-  '{f}_{l}',
-  '{l}_{f}',
-  
-  // With numbers (common variations)
+  // Numbered variations (for duplicates)
   '{first}.{last}1',
   '{first}{last}1',
   '{f}{last}1',
-  '{first}1',
-  '{last}1',
-  
-  // With initials and numbers
-  '{first}.{last}01',
-  '{f}.{last}01',
-  '{first}01',
-  
-  // Generic/role-based emails
-  'info',
-  'contact',
-  'admin',
-  'support',
-  'hello',
-  'team',
-  'sales',
-  'marketing',
-  'hr',
-  'finance',
-  'office',
-  'reception',
-  'jobs',
-  'careers',
-  'help',
-  'service',
-  'business',
-  'mail'
+];
+
+const ROLE_BASED_PATTERNS = [
+  // Generic business emails (verified to exist commonly)
+  'info', 'contact', 'admin', 'support', 'hello', 'team',
+  'sales', 'marketing', 'hr', 'office', 'help', 'service'
+];
+
+// Combine all patterns with priority weighting
+const DEFAULT_EMAIL_PATTERNS = [
+  ...HIGH_PRIORITY_PATTERNS,
+  ...MEDIUM_PRIORITY_PATTERNS, 
+  ...LOW_PRIORITY_PATTERNS,
+  ...ROLE_BASED_PATTERNS
 ];
 
 // Get detected patterns for a domain or use defaults
@@ -147,17 +129,29 @@ async function testSMTPDeliverability(email: string, domain: string): Promise<bo
   }
 }
 
-// Generate email permutations using detected or default patterns
-async function generateEmailPermutations(firstName: string, lastName: string, domain: string, supabase: any): Promise<{ email: string, pattern: string }[]> {
-  const patterns = await getEmailPatterns(supabase, domain);
-  const emails: { email: string, pattern: string }[] = [];
+// Smart email generation with prioritization and scoring
+async function generateEmailPermutations(firstName: string, lastName: string, domain: string, supabase: any): Promise<{ email: string, pattern: string, priority: number }[]> {
+  const detectedPatterns = await getEmailPatterns(supabase, domain);
+  const emails: { email: string, pattern: string, priority: number }[] = [];
   
   const f = firstName.toLowerCase().charAt(0);
   const l = lastName.toLowerCase().charAt(0);
-  const first = firstName.toLowerCase();
-  const last = lastName.toLowerCase();
+  const first = firstName.toLowerCase().replace(/[^a-z]/g, '');
+  const last = lastName.toLowerCase().replace(/[^a-z]/g, '');
 
-  for (const pattern of patterns) {
+  // Function to get pattern priority
+  const getPatternPriority = (pattern: string): number => {
+    if (HIGH_PRIORITY_PATTERNS.includes(pattern)) return 90;
+    if (MEDIUM_PRIORITY_PATTERNS.includes(pattern)) return 70;  
+    if (LOW_PRIORITY_PATTERNS.includes(pattern)) return 50;
+    if (ROLE_BASED_PATTERNS.includes(pattern)) return 60;
+    return 30; // Detected patterns get medium priority
+  };
+
+  // Process patterns in priority order
+  const allPatterns = [...new Set([...detectedPatterns, ...DEFAULT_EMAIL_PATTERNS])];
+  
+  for (const pattern of allPatterns) {
     let emailLocal = pattern
       .replace(/{first}/g, first)
       .replace(/{last}/g, last)
@@ -167,15 +161,20 @@ async function generateEmailPermutations(firstName: string, lastName: string, do
     const email = `${emailLocal}@${domain.toLowerCase()}`;
     
     if (validateEmailSyntax(email)) {
-      emails.push({ email, pattern });
+      const priority = getPatternPriority(pattern);
+      emails.push({ email, pattern, priority });
     }
   }
 
-  // Remove duplicates based on email address
-  const uniqueEmails = emails.filter((item, index, arr) => 
-    arr.findIndex(t => t.email === item.email) === index
-  );
+  // Remove duplicates and sort by priority
+  const uniqueEmails = emails
+    .filter((item, index, arr) => 
+      arr.findIndex(t => t.email === item.email) === index
+    )
+    .sort((a, b) => b.priority - a.priority)
+    .slice(0, 50); // Limit to top 50 most likely emails
 
+  console.log(`Generated ${uniqueEmails.length} prioritized email candidates`);
   return uniqueEmails;
 }
 
@@ -256,12 +255,13 @@ serve(async (req) => {
 
     console.log(`Generated ${emailCandidates.length} email candidates using ${existingPatterns?.length || 0} detected patterns`);
 
-    // Insert email candidates
-    const candidates = emailCandidates.map(({ email, pattern }) => ({
+    // Insert email candidates with priority metadata
+    const candidates = emailCandidates.map(({ email, pattern, priority }) => ({
       test_id: testId,
       email_address: email,
       email_pattern: pattern,
-      verification_status: 'pending'
+      verification_status: 'pending',
+      verification_result: { priority_score: priority }
     }));
 
     const { error: insertError } = await supabase

@@ -118,11 +118,20 @@ export const TestResults: React.FC<TestResultsProps> = ({ testId }) => {
   const sendTestEmails = async () => {
     if (!emailCandidates.length) return;
 
-    setGenerationProgress({ isGenerating: true, progress: 0, currentStep: 'Starting real email delivery tests...' });
+    setGenerationProgress({ isGenerating: true, progress: 0, currentStep: 'Starting comprehensive real delivery tests...' });
     
     try {
-      const validCandidates = emailCandidates.filter(c => c.verification_status === 'valid');
-      const totalEmails = Math.min(validCandidates.length, 5); // Test max 5 emails
+      // Prioritize high-probability emails for testing
+      const validCandidates = emailCandidates
+        .filter(c => c.verification_status === 'valid')
+        .sort((a, b) => {
+          const scoreA = a.verification_result?.priority_score || 0;
+          const scoreB = b.verification_result?.priority_score || 0;
+          return scoreB - scoreA;
+        });
+      
+      const totalEmails = Math.min(validCandidates.length, 8); // Test up to 8 highest priority emails
+      let deliveryConfirmed = 0;
       
       for (let i = 0; i < totalEmails; i++) {
         const candidate = validCandidates[i];
@@ -131,18 +140,22 @@ export const TestResults: React.FC<TestResultsProps> = ({ testId }) => {
         setGenerationProgress({ 
           isGenerating: true, 
           progress, 
-          currentStep: `Sending test email to ${candidate.email_address}...` 
+          currentStep: `Testing real delivery: ${candidate.email_address} (Priority: ${candidate.verification_result?.priority_score || 0})` 
         });
 
-        const testResponse = await supabase.functions.invoke('send-test-email', {
+        // Use the new real delivery test function
+        const testResponse = await supabase.functions.invoke('test-real-delivery', {
           body: { 
-            email: candidate.email_address,
+            testEmail: candidate.email_address,
             testId: test?.id
           }
         });
 
-        // Update candidate with real delivery test result
-        const deliveryStatus = testResponse.error ? 'delivery_failed' : 'delivery_confirmed';
+        let deliveryStatus = 'delivery_failed';
+        if (testResponse.data?.deliveryConfirmed) {
+          deliveryStatus = 'delivery_confirmed';
+          deliveryConfirmed++;
+        }
         
         await supabase
           .from('email_candidates')
@@ -153,29 +166,36 @@ export const TestResults: React.FC<TestResultsProps> = ({ testId }) => {
           })
           .eq('id', candidate.id);
 
-        // Small delay between emails
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        // Adaptive delay based on success rate
+        await new Promise(resolve => setTimeout(resolve, deliveryConfirmed > 0 ? 3000 : 2000));
       }
 
-      setGenerationProgress({ isGenerating: true, progress: 100, currentStep: 'Real delivery tests complete!' });
+      const successRate = totalEmails > 0 ? Math.round((deliveryConfirmed / totalEmails) * 100) : 0;
+
+      setGenerationProgress({ 
+        isGenerating: true, 
+        progress: 100, 
+        currentStep: `Real delivery complete! ${successRate}% confirmed (${deliveryConfirmed}/${totalEmails})` 
+      });
       
-      // Refresh data
+      // Refresh data to show results
       await fetchTestData();
       
       setTimeout(() => {
         setGenerationProgress({ isGenerating: false, progress: 0, currentStep: '' });
-      }, 1000);
+      }, 2000);
 
       toast({
-        title: "Real delivery tests completed",
-        description: `Tested ${totalEmails} email addresses with actual delivery`,
+        title: "Real delivery tests completed!", 
+        description: `🎯 ${deliveryConfirmed} of ${totalEmails} emails confirmed deliverable (${successRate}% success rate)`,
+        variant: successRate >= 50 ? "default" : "destructive"
       });
 
     } catch (error) {
-      console.error('Error testing email delivery:', error);
+      console.error('Error testing real email delivery:', error);
       setGenerationProgress({ isGenerating: false, progress: 0, currentStep: '' });
       toast({
-        title: "Delivery test failed", 
+        title: "Real delivery test failed", 
         description: error instanceof Error ? error.message : "Unknown error occurred",
         variant: "destructive",
       });
