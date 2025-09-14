@@ -85,11 +85,13 @@ export type Database = {
       }
       email_candidates: {
         Row: {
+          bounce_count: number | null
           created_at: string
           delivery_response: string | null
           email_address: string
           email_pattern: string
           id: string
+          last_bounce_at: string | null
           mx_records: string[] | null
           smtp_response: string | null
           test_id: string
@@ -98,11 +100,13 @@ export type Database = {
           verification_status: string
         }
         Insert: {
+          bounce_count?: number | null
           created_at?: string
           delivery_response?: string | null
           email_address: string
           email_pattern: string
           id?: string
+          last_bounce_at?: string | null
           mx_records?: string[] | null
           smtp_response?: string | null
           test_id: string
@@ -111,11 +115,13 @@ export type Database = {
           verification_status?: string
         }
         Update: {
+          bounce_count?: number | null
           created_at?: string
           delivery_response?: string | null
           email_address?: string
           email_pattern?: string
           id?: string
+          last_bounce_at?: string | null
           mx_records?: string[] | null
           smtp_response?: string | null
           test_id?: string
@@ -162,6 +168,45 @@ export type Database = {
           last_updated?: string
           pattern?: string
           sample_count?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      email_test_results: {
+        Row: {
+          bounce_details: Json | null
+          created_at: string
+          delivered_at: string | null
+          delivery_confirmed: boolean | null
+          delivery_status: string | null
+          email: string
+          id: string
+          message_id: string | null
+          test_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          bounce_details?: Json | null
+          created_at?: string
+          delivered_at?: string | null
+          delivery_confirmed?: boolean | null
+          delivery_status?: string | null
+          email: string
+          id?: string
+          message_id?: string | null
+          test_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          bounce_details?: Json | null
+          created_at?: string
+          delivered_at?: string | null
+          delivery_confirmed?: boolean | null
+          delivery_status?: string | null
+          email?: string
+          id?: string
+          message_id?: string | null
+          test_id?: string | null
           updated_at?: string
         }
         Relationships: []

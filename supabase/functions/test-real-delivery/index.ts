@@ -166,6 +166,21 @@ You can safely delete this email.
 
     console.log(`✅ Real email delivery confirmed for ${testEmail}`);
 
+    // Store in email_test_results table for bounce tracking
+    const { error: testResultError } = await supabase
+      .from('email_test_results')
+      .insert({
+        test_id: testId,
+        email: testEmail,
+        message_id: emailResponse.data?.id,
+        delivery_status: 'sent',
+        created_at: timestamp
+      });
+
+    if (testResultError) {
+      console.error('Error storing test result:', testResultError);
+    }
+
     // If we have a test ID, update the database
     if (testId && supabase) {
       try {

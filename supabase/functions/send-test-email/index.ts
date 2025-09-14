@@ -1,8 +1,14 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { Resend } from "npm:resend@4.0.0";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.55.0';
 
 const resend = new Resend(Deno.env.get('RESEND_API_KEY'));
+
+const supabase = createClient(
+  Deno.env.get('SUPABASE_URL') ?? '',
+  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+);
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -142,6 +148,18 @@ You can safely ignore or delete this email. This test was conducted to verify em
     }
 
     console.log(`Test email sent successfully to ${email}. Message ID: ${emailResponse.data?.id}`);
+
+    // Store in email_test_results for bounce tracking
+    const { error: testResultError } = await supabase.from('email_test_results').insert({
+      email,
+      message_id: emailResponse.data?.id,
+      delivery_status: 'sent',
+      created_at: timestamp
+    });
+
+    if (testResultError) {
+      console.error('Error storing test result:', testResultError);
+    }
 
     const response: TestEmailResponse = {
       success: true,
